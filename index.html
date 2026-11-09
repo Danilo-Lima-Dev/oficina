@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sistema da Tapeçaria</title>
+<meta name="theme-color" content="#24262c">
+<script>/* aplica o tema salvo antes de desenhar a tela, sem piscar */try{var t=localStorage.getItem("tapecaria_tema");if(t==="claro")document.documentElement.dataset.theme="light";else if(t==="escuro")document.documentElement.dataset.theme="dark"}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+<div id="login" class="login" hidden>
+  <div class="login-card">
+    <div class="login-brand"><span id="loginLogo" class="logo-caixa grande"></span><div><b id="loginEmpresa">Tapeçaria</b><span>Sistema de gestão</span></div></div>
+    <hr class="stitch">
+    <div id="loginCorpo"></div>
+  </div>
+  <p class="login-rodape">Acesso restrito. Seus acessos ficam registrados conforme a LGPD.</p>
+</div>
+
+<div id="app" hidden>
+  <header class="bar">
+    <div class="wrap bar-top">
+      <div class="brand"><span id="brandLogo" class="logo-caixa"></span><span id="brandName">Tapeçaria</span></div>
+      <span class="demo" title="Protótipo com dados de exemplo">Protótipo</span>
+      <span class="spacer"></span>
+      <button class="tema" id="temaBtn" type="button" aria-label="Mudar tema"></button>
+      <div class="usuario">
+        <button class="usuario-btn" id="userBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="userMenu">
+          <span class="avatar" id="userIni" aria-hidden="true"></span>
+          <span class="usuario-txt"><b id="userNome"></b><span id="userPerfil"></span></span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="usuario-menu" id="userMenu" role="menu" hidden>
+          <button role="menuitem" type="button" id="mSenha">Alterar minha senha</button>
+          <button role="menuitem" type="button" id="mSair">Sair</button>
+        </div>
+      </div>
+    </div>
+    <nav class="wrap tabs" id="tabs" aria-label="Seções"></nav>
+  </header>
+  <div id="alerta"></div>
+  <main class="wrap" id="view"></main>
+</div>
+<div id="modalRoot"></div>
+<div id="confirmRoot"></div>
+<div id="print"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>  <!-- endereço e chave pública do seu projeto Supabase -->
+<script src="js/teste.js"></script>   <!-- dados de teste: pode remover quando for usar de verdade -->
+<script src="js/dados.js"></script>
+<script src="js/util.js"></script>
+<script src="js/nuvem.js"></script>   <!-- ligação com o banco de dados (Supabase) -->
+<script src="js/app.js"></script>
+<script src="js/acesso.js"></script>
+</body>
+</html>
