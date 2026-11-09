@@ -1,6 +1,5 @@
 /* Dados: perfis, dados de exemplo e gravação no navegador */
 /* ===================== Dados ===================== */
-const KEY='tapecaria_prototipo_v1';
 /* ===================== Acessos e permissões ===================== */
 // Cada função do sistema que pode ser liberada ou bloqueada por usuário.
 const PERMISSOES=[
@@ -54,16 +53,6 @@ const MODELOS={
 // Aba do menu → permissão necessária
 const TAB_PERM={painel:'painel',orcamentos:'orc.ver',os:'os.ver',caixa:'caixa.ver',clientes:'cli.ver',veiculos:'vei.ver',estoque:'est.ver',auditoria:'auditoria',acessos:'acessos',config:'config'};
 const TABS={painel:'Painel',orcamentos:'Orçamentos',os:'Ordens de serviço',caixa:'Caixa',clientes:'Clientes',veiculos:'Veículos',estoque:'Estoque',auditoria:'Auditoria LGPD',acessos:'Acessos',config:'Configurações'};
-const SENHA_ITER=120000;
-// Usuários iniciais. Senhas: admin123 e vend123 (o sistema obriga a trocar no primeiro acesso)
-function seedUsers(){return [
-  {id:'u1',nome:'Administrador',login:'admin',email:'',admin:true,ativo:true,perms:perms(...TODAS_PERMS),
-   senha:{salt:'a73b1496cc1c2feb1af05f5dc7e0733e',hash:'2d12252f1256045045ef15aa41042067a0b5366cf9baa9a658726f81d84bc487',iter:SENHA_ITER},trocarSenha:true,senhaPadrao:true,criado:iso(new Date()),ultimoAcesso:''},
-  {id:'u2',nome:'Vendedor 1',login:'vendedor1',email:'',admin:false,ativo:true,perms:{...MODELOS.vendedor.perms},
-   senha:{salt:'1f8c2fd22853f04ce5d1f607b714c75c',hash:'5269ee3829a2a93c1b60f69afda59668d97020c8b0bdb147b24e3602d9674320',iter:SENHA_ITER},trocarSenha:true,senhaPadrao:true,criado:iso(new Date()),ultimoAcesso:''},
-  ...(typeof USUARIOS_TESTE!=='undefined'?USUARIOS_TESTE.map((t,i)=>({id:'t'+(i+1),nome:t.nome,login:t.login,email:'',admin:false,ativo:true,perms:{...MODELOS[t.modelo].perms},
-   senha:{...t.senha,iter:SENHA_ITER},trocarSenha:true,senhaPadrao:true,criado:iso(new Date()),ultimoAcesso:''})):[])
-]}
 const OS_STATUS=['Aguardando','Em andamento','Pronto','Entregue','Cancelada'];
 const ORC_STATUS=['Aberto','Aprovado','Recusado','Vencido'];
 const UNIDADES=['m','m²','un','kg','L','rolo','par','h'];
@@ -80,21 +69,6 @@ function uid(){return Math.random().toString(36).slice(2,10)}
 
 // Dados de exemplo para testes: gerados por js/teste.js
 function seed(){return gerarDadosTeste()}
-function seedCaixa(){
-  const L=(dias,hora,tipo,valor,descricao,categoria,forma,osId,user)=>({id:uid(),data:addDays(dias)+'T'+hora,tipo,valor,descricao,categoria,forma,osId:osId||'',user:user||'Administrador'});
-  return [
-    L(-12,'08:00','entrada',3500,'Saldo inicial do caixa','Outras entradas','Dinheiro','','Administrador'),
-    L(-10,'09:30','saida',1140,'Couro ecológico preto – 30 m (NF 4471)','Compra de material','Boleto','','Administrador'),
-    L(-8,'10:00','saida',1200,'Aluguel do galpão','Aluguel','PIX','','Administrador'),
-    L(-6,'16:20','entrada',200,'Sinal OS-'+ano0()+'-0002','Sinal de OS','PIX','s2','Vendedor 1'),
-    L(-5,'11:15','entrada',60,'Venda de retalho de courvin','Venda de material','Dinheiro','','Vendedor 1'),
-    L(-4,'08:40','saida',236.5,'Conta de energia','Energia e água','PIX','','Administrador'),
-    L(-3,'15:40','saida',95,'Cola de contato 2,8 kg','Compra de material','Dinheiro','','Administrador'),
-    L(-2,'09:05','entrada',150,'Sinal OS-'+ano0()+'-0001','Sinal de OS','Dinheiro','s1','Vendedor 1'),
-    L(0,'08:15','saida',45,'Frete de material','Combustível e frete','Dinheiro','','Administrador')
-  ];
-}
-function ano0(){return new Date().getFullYear()}
 // Ajustes nos dados lidos do banco (permissões novas aparecem desligadas)
 function migrar(S){
   if(!Array.isArray(S.categorias))S.categorias=[];

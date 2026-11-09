@@ -8,13 +8,6 @@
    e a linha <script src="js/teste.js"> do index.html.
    ===================================================================== */
 
-// Usuários extras para testar permissões (senha inicial entre parênteses)
-const USUARIOS_TESTE=[
-  {login:'estoque1',nome:'Carla – Estoque',senhaInicial:'estoq123',modelo:'estoque',
-   senha:{salt:'7d789a1b933ddd27f77e3f9a3c4f700c',hash:'23e9c611e5f31e5d09d754e1e77685e32c168b555fdbe8352b84ff94db8641fe'}},
-  {login:'financeiro1',nome:'Rita – Financeiro',senhaInicial:'finan123',modelo:'financeiro',
-   senha:{salt:'05a46b0196d32657f3a516c0b13053cc',hash:'934dde6563d8425f4aa7e1b832b4b886892e29326fa7e1ca9e8b1ba1453582b0'}}
-];
 
 function gerarDadosTeste(){
   // Sorteio com semente fixa: os dados saem iguais toda vez que forem gerados
@@ -229,7 +222,7 @@ function gerarDadosTeste(){
   return {
     exemplo:true,
     empresa:{nome:'Tapeçaria Modelo',cnpj:'11.444.777/0001-61',endereco:'Rua Areolino de Abreu, 1520 – Centro – Teresina/PI',telefone:'(86) 99999-0000',email:'contato@tapecariamodelo.com.br',encarregado:'Administrador – privacidade@tapecariamodelo.com.br',garantia:90,validade:15,retencao:'Ordens de serviço e orçamentos: 5 anos (obrigações fiscais e de defesa do consumidor). Cadastro de cliente sem movimentação: revisar após 2 anos.'},
-    users:seedUsers(),
+    users:[],
     seq:{orc:orcLista.length+1,os:osLista.length+1},
     clientes,veiculos,produtos,categorias,movs,
     orcamentos:orcLista,os:osLista,caixa,logs:[]

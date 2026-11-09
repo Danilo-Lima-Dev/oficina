@@ -43,7 +43,17 @@ alter table public.perfis enable row level security;
 alter table public.publico enable row level security;
 
 create index if not exists caixa_os on public.caixa ((dados->>'osId'));
+-- número de OS e de orçamento nunca se repete
+do $$ begin
+  create unique index if not exists os_num_unico on public.os ((dados->>'num'));
+  create unique index if not exists orc_num_unico on public.orcamentos ((dados->>'num'));
+exception when unique_violation then raise notice 'Há números repetidos em OS ou orçamentos: corrija antes de rodar de novo.';
+end $$;
 create index if not exists logs_data on public.logs ((dados->>'data'));
+
+-- Senha temporária em vigor (para impedir que alguém "desligue" a troca obrigatória sem trocar a senha)
+create table if not exists public.senhas_temporarias (user_id uuid primary key references auth.users(id) on delete cascade, hash text not null);
+alter table public.senhas_temporarias enable row level security; -- sem regras: só as funções do sistema mexem
 
 create sequence if not exists public.seq_os;
 create sequence if not exists public.seq_orc;
@@ -136,26 +146,100 @@ create policy cx_apagar      on public.caixa for delete to authenticated using (
 
 -- Auditoria: todos registram, só quem tem a função vê; ninguém altera nem apaga
 create policy log_ver        on public.logs for select to authenticated using (pode('auditoria'));
-create policy log_criar      on public.logs for insert to authenticated with check (auth.uid() is not null);
+create policy log_criar      on public.logs for insert to authenticated with check (ativo());
 
 -- Usuários: cada um vê o próprio cadastro; quem gerencia acessos vê e altera todos
 create policy perf_ver       on public.perfis for select to authenticated using (id = auth.uid() or pode('acessos') or pode('auditoria'));
 create policy perf_mudar     on public.perfis for update to authenticated using (id = auth.uid() or pode('acessos')) with check (id = auth.uid() or pode('acessos'));
 
--- Quem não gerencia acessos só pode mudar no próprio cadastro o último acesso e a troca de senha
+-- Regras do cadastro de usuários (valem também para quem usa a API direto):
+--  * quem não gerencia acessos só muda o próprio "último acesso"; a troca obrigatória
+--    de senha só é desligada depois que a senha temporária foi realmente trocada;
+--  * só administrador cria administrador ou mexe no cadastro de outro administrador;
+--  * sempre existe pelo menos um administrador ativo.
+create or replace function public.eh_admin() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from perfis where id = auth.uid()
+    and coalesce((dados->>'admin')::boolean, false) and coalesce((dados->>'ativo')::boolean, false));
+$$;
 create or replace function public.proteger_perfil() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, auth as $$
+declare
+  pedido text := new.dados->>'trocarSenha';
+  era_admin boolean := coalesce((old.dados->>'admin')::boolean, false) and coalesce((old.dados->>'ativo')::boolean, false);
+  fica_admin boolean := coalesce((new.dados->>'admin')::boolean, false) and coalesce((new.dados->>'ativo')::boolean, false);
 begin
-  if not pode('acessos') then
-    new.dados := old.dados || jsonb_strip_nulls(jsonb_build_object(
-      'ultimoAcesso', new.dados->'ultimoAcesso',
-      'trocarSenha',  new.dados->'trocarSenha'));
-  end if;
   new.atualizado_em := now();
+  if auth.uid() is null then return new; end if;            -- alteração feita pelas funções internas
+  if not pode('acessos') then
+    new.dados := old.dados || jsonb_strip_nulls(jsonb_build_object('ultimoAcesso', new.dados->'ultimoAcesso'));
+    if new.id = auth.uid() and pedido = 'false' and coalesce((old.dados->>'trocarSenha')::boolean, false)
+       and not exists (select 1 from senhas_temporarias t join auth.users u on u.id = t.user_id
+                       where t.user_id = new.id and u.encrypted_password = t.hash) then
+      new.dados := new.dados || '{"trocarSenha": false}'::jsonb;
+      delete from senhas_temporarias where user_id = new.id;
+    end if;
+    return new;
+  end if;
+  if not eh_admin() then
+    if coalesce((old.dados->>'admin')::boolean, false) and new.id <> auth.uid() then raise exception 'Só um administrador pode alterar o cadastro de outro administrador.'; end if;
+    if coalesce((new.dados->>'admin')::boolean, false) and not coalesce((old.dados->>'admin')::boolean, false) then raise exception 'Só um administrador pode dar acesso de administrador.'; end if;
+  end if;
+  if era_admin and not fica_admin and not exists (
+     select 1 from perfis where id <> new.id and coalesce((dados->>'admin')::boolean, false) and coalesce((dados->>'ativo')::boolean, false)) then
+    raise exception 'Precisa existir pelo menos um administrador ativo.';
+  end if;
+  -- ao pedir troca obrigatória, guarda a senha atual (temporária) para conferir depois
+  if pedido = 'true' and not coalesce((old.dados->>'trocarSenha')::boolean, false) then
+    insert into senhas_temporarias (user_id, hash) select id, encrypted_password from auth.users where id = new.id and encrypted_password is not null
+    on conflict (user_id) do update set hash = excluded.hash;
+  end if;
   return new;
 end $$;
 drop trigger if exists proteger_perfil on public.perfis;
 create trigger proteger_perfil before update on public.perfis for each row execute function public.proteger_perfil();
+
+-- Auditoria: o banco grava quem fez e quando (ninguém registra em nome de outra pessoa)
+create or replace function public.carimbar_log() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare p jsonb;
+begin
+  select dados into p from perfis where id = auth.uid();
+  new.dados := new.dados || jsonb_build_object(
+    'user', coalesce(p->>'nome', 'desconhecido') || ' (' || coalesce(p->>'login', '?') || ')',
+    'data', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'));
+  return new;
+end $$;
+drop trigger if exists carimbar_log on public.logs;
+create trigger carimbar_log before insert on public.logs for each row execute function public.carimbar_log();
+
+-- Estoque: quem não pode editar materiais (ex.: vendedor dando baixa na OS) só muda a quantidade
+create or replace function public.proteger_produto() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and not pode('est.editar') then
+    new.dados := old.dados || jsonb_build_object('qtd', new.dados->'qtd');
+  end if;
+  return new;
+end $$;
+drop trigger if exists proteger_produto on public.produtos;
+create trigger proteger_produto before update on public.produtos for each row execute function public.proteger_produto();
+
+-- Caixa: valor sempre positivo, tipo válido e pagamento só de OS que existe
+create or replace function public.validar_caixa() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v numeric;
+begin
+  if coalesce(new.dados->>'tipo', '') not in ('entrada', 'saida') then raise exception 'Tipo de lançamento inválido.'; end if;
+  begin v := (new.dados->>'valor')::numeric; exception when others then v := null; end;
+  if v is null or v <= 0 or v > 10000000 then raise exception 'O valor do lançamento precisa ser maior que zero.'; end if;
+  if coalesce(new.dados->>'osId', '') <> '' and not exists (select 1 from os where id = new.dados->>'osId') then
+    raise exception 'A ordem de serviço deste pagamento não existe.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists validar_caixa on public.caixa;
+create trigger validar_caixa before insert on public.caixa for each row execute function public.validar_caixa();
 
 -- Marca quem alterou e quando
 create or replace function public.marcar_alteracao() returns trigger
@@ -218,8 +302,16 @@ create or replace function public.admin_definir_senha(p_id uuid, p_senha text) r
 language plpgsql security definer set search_path = public, extensions, auth as $$
 begin
   if not pode('acessos') then raise exception 'Sem permissão para alterar senhas.'; end if;
+  if not eh_admin() and exists (select 1 from perfis where id = p_id and coalesce((dados->>'admin')::boolean, false)) then
+    raise exception 'Só um administrador pode alterar a senha de outro administrador.'; end if;
   if length(coalesce(p_senha, '')) < 8 then raise exception 'A senha precisa ter pelo menos 8 caracteres.'; end if;
   update auth.users set encrypted_password = extensions.crypt(p_senha, extensions.gen_salt('bf')), updated_at = now() where id = p_id;
+  -- senha definida por outra pessoa = temporária: a pessoa troca no próximo acesso
+  if p_id <> auth.uid() then
+    insert into senhas_temporarias (user_id, hash) select id, encrypted_password from auth.users where id = p_id
+    on conflict (user_id) do update set hash = excluded.hash;
+    update perfis set dados = dados || '{"trocarSenha": true}'::jsonb where id = p_id;
+  end if;
 end $$;
 
 -- Administrador troca o e-mail de acesso de outra pessoa
@@ -227,6 +319,9 @@ create or replace function public.admin_alterar_email(p_id uuid, p_email text) r
 language plpgsql security definer set search_path = public, auth as $$
 begin
   if not pode('acessos') then raise exception 'Sem permissão para alterar usuários.'; end if;
+  if not eh_admin() and exists (select 1 from perfis where id = p_id and coalesce((dados->>'admin')::boolean, false)) then
+    raise exception 'Só um administrador pode alterar o e-mail de outro administrador.'; end if;
+  if exists (select 1 from auth.users where lower(email) = lower(p_email) and id <> p_id) then raise exception 'Já existe um usuário com este e-mail.'; end if;
   if p_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'E-mail inválido.'; end if;
   update auth.users set email = lower(p_email), email_confirmed_at = coalesce(email_confirmed_at, now()), updated_at = now() where id = p_id;
   update auth.identities set identity_data = identity_data || jsonb_build_object('email', lower(p_email)) where user_id = p_id and provider = 'email';
@@ -239,6 +334,11 @@ language plpgsql security definer set search_path = public, auth as $$
 begin
   if not pode('acessos') then raise exception 'Sem permissão para excluir usuários.'; end if;
   if p_id = auth.uid() then raise exception 'Você não pode excluir o próprio usuário.'; end if;
+  if exists (select 1 from perfis where id = p_id and coalesce((dados->>'admin')::boolean, false)) then
+    if not eh_admin() then raise exception 'Só um administrador pode excluir outro administrador.'; end if;
+    if not exists (select 1 from perfis where id <> p_id and coalesce((dados->>'admin')::boolean, false) and coalesce((dados->>'ativo')::boolean, false)) then
+      raise exception 'Precisa existir pelo menos um administrador ativo.'; end if;
+  end if;
   delete from auth.users where id = p_id;
 end $$;
 
@@ -276,8 +376,25 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- ---------------------------------------------------------------------
--- 5. Acesso das funções e atualização em tempo real entre aparelhos
+-- 5. Quem pode usar cada tabela pela API (funciona com "Expor automaticamente
+--    novas tabelas" ligado ou desligado). Visitante sem login só lê nome e logo;
+--    o resto exige login, e as regras do item 2 decidem o que cada um vê.
 -- ---------------------------------------------------------------------
+grant usage on schema public to anon, authenticated;
+revoke all on public.perfis, public.config, public.clientes, public.veiculos, public.produtos, public.categorias,
+  public.movs, public.orcamentos, public.os, public.caixa, public.logs from anon;
+revoke all on public.publico from anon;
+grant select on public.publico to anon;
+grant select, update on public.publico to authenticated;
+grant select, update on public.perfis to authenticated;
+grant select, insert, update, delete on public.config, public.clientes, public.veiculos, public.produtos,
+  public.categorias, public.movs, public.orcamentos, public.os, public.caixa to authenticated;
+grant select, insert on public.logs to authenticated;
+
+-- ---------------------------------------------------------------------
+-- 6. Acesso das funções e atualização em tempo real entre aparelhos
+-- ---------------------------------------------------------------------
+revoke all on public.senhas_temporarias from anon, authenticated;
 revoke all on function public.admin_definir_senha(uuid, text), public.admin_alterar_email(uuid, text),
   public.admin_excluir_usuario(uuid), public.proximo_numero(text), public.ajustar_numeracao(), public.clientes_resumo() from public, anon;
 grant execute on function public.admin_definir_senha(uuid, text), public.admin_alterar_email(uuid, text),

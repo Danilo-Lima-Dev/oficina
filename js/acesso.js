@@ -32,8 +32,11 @@ function prepararTelaEntrada(){
 function telaConfigurar(){
   prepararTelaEntrada();
   $('#loginCorpo').innerHTML=`<div class="login-form"><h1>Falta ligar o banco de dados</h1>
-    <p style="margin:0">Abra o arquivo <code>js/config.js</code> do repositório e cole o <b>Project URL</b> e a chave <b>anon public</b> do seu projeto no Supabase.</p>
-    <p class="lock" style="margin:0">O passo a passo completo está no arquivo <b>LEIA-ME.md</b> do repositório.</p></div>`;
+    <div class="aviso erro">${problemaConfig()}</div>
+    <p style="margin:0">O arquivo <code>js/config.js</code> do repositório deve ficar assim, com os valores do seu projeto (Supabase → <b>Project Settings → API</b>):</p>
+    <pre class="cfg-exemplo">const SUPABASE_URL = 'https://abcdefghij.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOi...';</pre>
+    <p class="lock" style="margin:0">Depois de salvar no GitHub, espere 1 ou 2 minutos e recarregue a página com <b>Ctrl+F5</b>. O passo a passo completo está no <b>LEIA-ME.md</b>.</p></div>`;
 }
 function mostrarLogin(aviso,tipo){
   prepararTelaEntrada();
