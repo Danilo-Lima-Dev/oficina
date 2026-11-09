@@ -52,7 +52,7 @@ function avisarQueda(antes){
 }
 
 /* ---------- Arquivos: planilha CSV que abre direto no Excel ---------- */
-function csvCampo(v){if(typeof v==='number')v=String(v).replace('.',',');v=String(v??'');return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
+function csvCampo(v){if(typeof v==='number')v=String(v).replace('.',',');else{v=String(v??'');if(/^[=+\-@\t\r]/.test(v))v="'"+v}return /[";\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}
 function baixarCSV(nome,linhas){
   const txt='﻿'+linhas.map(l=>l.map(csvCampo).join(';')).join('\r\n');
   const url=URL.createObjectURL(new Blob([txt],{type:'text/csv;charset=utf-8'}));
@@ -65,16 +65,6 @@ function copiarTexto(txt,el){
 }
 const hojeISO=()=>iso(new Date());
 
-/* ---------- Senhas: PBKDF2-SHA256 com sal aleatório (a senha nunca é guardada) ---------- */
-const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
-const unhex=h=>new Uint8Array(h.match(/../g).map(x=>parseInt(x,16)));
-async function hashSenha(senha,saltHex,iter){
-  if(!(window.crypto&&crypto.subtle))throw new Error('Este navegador não permite criptografia aqui. Abra pelo iniciar.bat (http://localhost:8000) no Chrome ou Edge.');
-  const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(senha),'PBKDF2',false,['deriveBits']);
-  return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:unhex(saltHex),iterations:iter||SENHA_ITER},k,256));
-}
-async function novaSenhaHash(senha){const salt=hex(crypto.getRandomValues(new Uint8Array(16)));return {salt,hash:await hashSenha(senha,salt,SENHA_ITER),iter:SENHA_ITER}}
-async function confere(u,senha){if(!u.senha)return false;const h=await hashSenha(senha,u.senha.salt,u.senha.iter);let d=0;for(let i=0;i<h.length;i++)d|=h.charCodeAt(i)^u.senha.hash.charCodeAt(i);return d===0&&h.length===u.senha.hash.length}
 // Regras mínimas de senha
 function problemaSenha(s,u){
   if(s.length<8)return 'A senha precisa ter pelo menos 8 caracteres.';

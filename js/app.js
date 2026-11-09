@@ -147,7 +147,6 @@ bind.os=()=>bindBusca();
 
 /* ---------- Editor de orçamento / OS ---------- */
 let D=null, DK=null;
-function optsClientes(sel){return `<option value="">Selecione…</option>`+S.clientes.filter(c=>!c.anonimizado||c.id===sel).map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.nome)}</option>`).join('')}
 function optsVeiculos(cid,sel){const l=S.veiculos.filter(v=>v.clienteId===cid&&(!v.excluido||v.id===sel));return `<option value="">${cid?(l.length?'Selecione…':'Cliente sem veículo cadastrado'):'Escolha o cliente primeiro'}</option>`+l.map(v=>`<option value="${v.id}" ${v.id===sel?'selected':''}>${esc(v.placa)} – ${esc(v.marca)} ${esc(v.modelo)} ${esc(v.ano)}</option>`).join('')+(cid&&pode('vei.editar')?'<option value="__novo">+ Cadastrar novo veículo</option>':'')}
 // Aviso quando a quantidade pedida passa do saldo em estoque
 function saldoHint(it){
@@ -205,7 +204,7 @@ function openEditor(kind,id,rascunho){
     <div><h3 style="margin-bottom:8px">Itens</h3>${itensHTML(ro)}</div>
     <div class="form">${val?`<div class="f"><label for="eDesc">Desconto (R$)</label><input type="number" id="eDesc" min="0" step="0.01" value="${D.desconto}"></div>`:''}
     <div class="f wide"><label for="eObs">Observações (saem impressas)</label><textarea id="eObs" ${ro?'disabled':''}>${esc(D.obs)}</textarea></div></div>
-    ${kind==='os'&&D.baixado?'<div class="note">Os materiais desta OS já saíram do estoque.</div>':''}
+    ${kind==='os'&&D.baixado?'<div class="note">Os materiais desta OS já saíram do estoque. Se mudar os itens, o estoque é ajustado; se cancelar, o material volta.</div>':''}
     ${kind==='os'&&src&&val&&(pode('caixa.receber')||pode('caixa.ver'))?(()=>{const r=recebido(src),t=soma(src).total;return `<div class="pagto"><div><span class="lock">Pagamento</span><b>${brl(r)} recebido de ${brl(t)}</b></div>${chipPagamento(src)}${falta(src)>0&&D.status!=='Cancelada'&&pode('caixa.receber')?'<button class="btn sm pri" id="eReceber">Registrar pagamento</button>':''}</div>`})():''}`;
   const foot=ro
     ?`<button class="btn" data-close>Fechar</button>${src&&pode('imprimir')?`<button class="btn pri" id="eSoImprimir">Imprimir</button>`:''}`
@@ -237,7 +236,15 @@ function wireEditor(ro){
   if(!$('#eSave'))return;
   $('#eSave').onclick=()=>salvarDoc(false);
   const ep=$('#ePrint');if(ep)ep.onclick=()=>salvarDoc(true);
-  const del=$('#eDel');if(del)del.onclick=()=>{const nome=DK==='orc'?numOrc(D):numOS(D);confirmar(`Excluir <b>${nome}</b>?`,()=>{closeModal();if(DK==='orc')S.orcamentos=S.orcamentos.filter(o=>o.id!==D.id);else S.os=S.os.filter(o=>o.id!==D.id);log('Excluiu documento',nome);save();render();toast(nome+' excluído')},'Excluir '+(DK==='orc'?'orçamento':'OS'))};
+  const del=$('#eDel');if(del)del.onclick=()=>{
+    const nome=DK==='orc'?numOrc(D):numOS(D);
+    if(DK==='os'&&S.caixa.some(l=>l.osId===D.id)){toast(nome+' tem pagamento lançado no caixa. Para desfazer, mude o status para Cancelada.');return}
+    const orig=DK==='os'?S.os.find(o=>o.id===D.id):null;
+    const nota=orig&&orig.baixado?'<p class="conf-nota">Os materiais que saíram do estoque por esta OS voltam para o estoque.</p>':'';
+    confirmar(`Excluir <b>${nome}</b>?${nota}`,()=>{closeModal();
+      if(DK==='orc')S.orcamentos=S.orcamentos.filter(o=>o.id!==D.id);
+      else{if(orig)acertarEstoque(null,orig,'Devolvido: '+nome+' excluída');S.os=S.os.filter(o=>o.id!==D.id)}
+      log('Excluiu documento',nome);save();render();toast(nome+' excluído')},'Excluir '+(DK==='orc'?'orçamento':'OS'))};
 }
 function lerCampos(){
   const g=id=>{const e=$('#'+id);return e?e.value:undefined};
@@ -253,6 +260,12 @@ async function salvarDoc(imprimir,depois){
     if(!D.itens.length){toast('Adicione pelo menos um item');return}
     if(D.itens.some(i=>!String(i.desc).trim())){toast('Preencha a descrição de todos os itens');return}
   }
+  if(D.itens.some(i=>!(Number(i.qtd)>0))){toast('A quantidade de cada item precisa ser maior que zero');return}
+  if(D.itens.some(i=>!(Number(i.preco)>=0))){toast('O preço dos itens não pode ser negativo');return}
+  if(!(Number(D.desconto)>=0)){toast('O desconto não pode ser negativo');$('#eDesc')?.focus();return}
+  if(Number(D.desconto)>soma({itens:D.itens,desconto:0}).sub){toast('O desconto não pode ser maior que o valor dos itens');$('#eDesc')?.focus();return}
+  if(DK==='os'&&D.entrada&&D.previsao&&D.previsao<D.entrada){toast('A previsão de entrega não pode ser antes da entrada');$('#ePrev')?.focus();return}
+  if(DK==='orc'&&!(D.validade>=0)){toast('A validade não pode ser negativa');return}
   const lista=DK==='orc'?S.orcamentos:S.os;
   let novo=false;
   if(!D.id){
@@ -260,19 +273,34 @@ async function salvarDoc(imprimir,depois){
     const bt=$('#eSave');if(bt){bt.disabled=true;bt.textContent='Salvando…'}
     try{D.num=await proximoNumero(DK)}catch(e){toast(e.message);if(bt){bt.disabled=false;bt.textContent='Salvar'}return}
     D.id=uid();lista.push(D);novo=true;
-  }else{const i=lista.findIndex(o=>o.id===D.id);lista[i]=D}
-  if(DK==='os')baixaEstoque(D);
+  }
+  const antigo=novo?null:lista.find(o=>o.id===D.id);
+  if(!novo){const i=lista.findIndex(o=>o.id===D.id);if(i<0){toast('Este documento foi excluído por outra pessoa');closeModal();render();return}lista[i]=D}
+  if(DK==='os')acertarEstoque(D,antigo);
   const nome=DK==='orc'?numOrc(D):numOS(D);
   log(novo?'Criou documento':'Alterou documento',nome);save();closeModal();render();toast(nome+' salvo');
   if(imprimir)(DK==='orc'?imprimirOrc:imprimirOS)(D.id);
   if(depois)depois(D.id);
 }
-function baixaEstoque(o){
-  if(o.baixado||!['Pronto','Entregue'].includes(o.status))return;
-  const antes=fotoEstoque();
-  o.itens.filter(i=>i.produtoId).forEach(i=>{const p=prod(i.produtoId);if(!p)return;p.qtd=+(p.qtd-Number(i.qtd)).toFixed(3);S.movs.unshift({id:uid(),data:agora(),produtoId:p.id,tipo:'Saída',qtd:Number(i.qtd),obs:'Usado na '+numOS(o),user:me().nome})});
-  o.baixado=true;
-  const neg=o.itens.filter(i=>i.produtoId&&prod(i.produtoId)?.qtd<0);
+// soma, por material, o que a OS usa do estoque
+function usoMaterial(itens){const m={};(itens||[]).forEach(i=>{if(i.produtoId)m[i.produtoId]=+((m[i.produtoId]||0)+(Number(i.qtd)||0)).toFixed(3)});return m}
+// deixa o estoque coerente com a OS: baixa ao ficar pronta, ajusta se os itens mudarem, devolve se for cancelada ou excluída
+function acertarEstoque(o,antigo,motivo){
+  const prev=antigo&&antigo.baixado?usoMaterial(antigo.baixados||antigo.itens):{};
+  let alvo={};
+  if(o&&o.status!=='Cancelada'&&(o.baixado||['Pronto','Entregue'].includes(o.status))){alvo=usoMaterial(o.itens);o.baixado=true}
+  else if(o)o.baixado=false;
+  if(o)o.baixados=Object.entries(alvo).map(([produtoId,qtd])=>({produtoId,qtd}));
+  const nome=numOS(o||antigo),antes=fotoEstoque();let saiu=false;
+  new Set([...Object.keys(prev),...Object.keys(alvo)]).forEach(id=>{
+    const d=+((alvo[id]||0)-(prev[id]||0)).toFixed(3);if(!d)return;
+    const p=prod(id);if(!p)return;
+    p.qtd=+(p.qtd-d).toFixed(3);if(d>0)saiu=true;
+    const obs=d>0?(prev[id]?'Ajuste da '+nome+' (itens alterados)':'Usado na '+nome):(motivo||(o&&o.status==='Cancelada'?'Devolvido: '+nome+' cancelada':'Ajuste da '+nome+' (itens alterados)'));
+    S.movs.unshift({id:uid(),data:agora(),produtoId:p.id,tipo:d>0?'Saída':'Entrada',qtd:Math.abs(d),obs,user:me().nome});
+  });
+  if(!saiu)return;
+  const neg=Object.keys(alvo).filter(id=>prod(id)?.qtd<0);
   if(neg.length)setTimeout(()=>toast('Atenção: estoque ficou negativo em '+neg.length+' material(is)'),800);
   else avisarQueda(antes);
 }
@@ -655,6 +683,7 @@ ACT.mov=id=>{
   $('#mSave').onclick=()=>{
     const tipo=$('#mTipo').value,q=parseFloat($('#mQtd').value);
     if(!(q>0)){toast('Informe uma quantidade maior que zero');return}
+    if(tipo==='Saída'&&q>p.qtd+1e-9){toast(`Saldo insuficiente: há só ${nfmt(p.qtd)} ${p.un}. Para corrigir o inventário, registre a diferença com o motivo.`);$('#mQtd').focus();return}
     const obs=$('#mObs').value.trim();if(!obs){toast('Informe o motivo');$('#mObs').focus();return}
     const lancar=cx&&cx.checked,valor=lancar?parseFloat($('#mValor').value):0;
     if(lancar&&!(valor>0)){toast('Informe o valor pago');$('#mValor').focus();return}

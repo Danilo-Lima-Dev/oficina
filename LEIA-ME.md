@@ -13,6 +13,7 @@ js/app.js             telas: orçamentos, OS, caixa, clientes, veículos, estoqu
 js/dados.js           lista de funções/permissões e modelos de acesso
 js/util.js            funções de apoio (busca, CPF/CNPJ, moeda, datas)
 js/teste.js           gerador de dados de teste (pode remover quando for usar de verdade)
+js/tema.js            aplica o tema claro/escuro antes de a página aparecer
 supabase/schema.sql   banco de dados: tabelas e regras de quem pode ver e mudar cada coisa
 ```
 
@@ -26,6 +27,10 @@ supabase/schema.sql   banco de dados: tabelas e regras de quem pode ver e mudar 
    - **Name:** tapecaria
    - **Database password:** crie uma senha forte e guarde (você quase não vai usar).
    - **Region:** escolha **South America (São Paulo)**. Os dados dos clientes ficam no Brasil.
+   - **Segurança:**
+     - **Habilitar API de Dados:** deixe **marcado** (é por onde o site fala com o banco).
+     - **Expor automaticamente novas tabelas:** pode **desmarcar** (o `schema.sql` libera cada tabela só para quem está logado).
+     - **Ativar RLS automático:** pode **marcar** (o `schema.sql` já liga essa proteção em todas as tabelas).
 3. Espere uns 2 minutos até o projeto ficar pronto.
 
 ### 2. Criar o banco de dados

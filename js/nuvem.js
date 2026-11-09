@@ -8,14 +8,32 @@
    ===================================================================== */
 let sb=null; // cliente do Supabase
 
-const configurado=()=>typeof SUPABASE_URL==='string'&&/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)\/?$/i.test(SUPABASE_URL.trim())&&typeof SUPABASE_ANON_KEY==='string'&&SUPABASE_ANON_KEY.length>30&&!/COLE_AQUI/.test(SUPABASE_ANON_KEY);
+/* ---------- Confere o js/config.js e diz exatamente o que está errado ---------- */
+// aceita o endereço colado com /rest/v1/ ou barra no final
+const urlSupabase=()=>String(typeof SUPABASE_URL==='string'?SUPABASE_URL:'').trim().replace(/^['"]|['"]$/g,'').replace(/\/(rest|auth)\/v1\/?.*$/i,'').replace(/\/+$/,'');
+const chaveSupabase=()=>String(typeof SUPABASE_ANON_KEY==='string'?SUPABASE_ANON_KEY:'').trim().replace(/^['"]|['"]$/g,'');
+function problemaConfig(){
+  if(typeof SUPABASE_URL==='undefined'||typeof SUPABASE_ANON_KEY==='undefined')
+    return 'O arquivo <code>js/config.js</code> não foi encontrado ou tem um erro de digitação. Confira se cada valor está entre aspas simples e se a linha termina com ponto e vírgula, como no exemplo abaixo.';
+  if(typeof supabase==='undefined')return 'A biblioteca do Supabase não carregou. Confira a internet e recarregue a página com Ctrl+F5.';
+  const url=urlSupabase(),chave=chaveSupabase();
+  if(!url||/COLE_AQUI/i.test(url))return 'O <b>Project URL</b> ainda não foi colado no <code>js/config.js</code>. Se você já colou, salve com <b>Commit changes</b>, espere 1 ou 2 minutos e recarregue com <b>Ctrl+F5</b>.';
+  if(!/^https:\/\/[^\s/]+\.[^\s/]+$/i.test(url))return `O Project URL parece errado: <code>${esc(url)}</code>. Ele deve ser parecido com <code>https://abcdefghij.supabase.co</code>.`;
+  if(!chave||/COLE_AQUI/i.test(chave))return 'A chave <b>anon public</b> ainda não foi colada no <code>js/config.js</code>. Se você já colou, salve com <b>Commit changes</b>, espere 1 ou 2 minutos e recarregue com <b>Ctrl+F5</b>.';
+  if(/^sb_secret_/i.test(chave)||/service_role/.test(atobSeguro(chave.split('.')[1]||'')))
+    return '⚠️ Você colou a chave <b>secreta</b> (service_role / secret). Ela dá acesso total ao banco e <b>não pode</b> ficar no site. Troque pela chave <b>anon public</b> (ou <b>publishable</b>) e, por segurança, gere uma nova chave secreta no Supabase.';
+  if(chave.length<30)return 'A chave colada parece incompleta. Copie de novo a chave <b>anon public</b> inteira (ela é bem longa).';
+  return '';
+}
+function atobSeguro(t){try{return atob(t.replace(/-/g,'+').replace(/_/g,'/'))}catch(e){return ''}}
+const configurado=()=>!problemaConfig();
 function iniciarSupabase(){
   if(sb)return sb;
-  sb=supabase.createClient(SUPABASE_URL.trim(),SUPABASE_ANON_KEY.trim(),{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'tapecaria_sessao'}});
+  sb=supabase.createClient(urlSupabase(),chaveSupabase(),{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,storageKey:'tapecaria_sessao'}});
   return sb;
 }
 // Cliente separado, sem guardar sessão: usado pelo administrador para criar usuários sem sair da própria conta
-const clienteTemporario=()=>supabase.createClient(SUPABASE_URL.trim(),SUPABASE_ANON_KEY.trim(),{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'tapecaria_tmp_'+Date.now()}});
+const clienteTemporario=()=>supabase.createClient(urlSupabase(),chaveSupabase(),{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'tapecaria_tmp_'+Date.now()}});
 
 // Coleções do objeto S ↔ tabelas do banco
 const TABELAS={clientes:'clientes',veiculos:'veiculos',produtos:'produtos',movs:'movs',orcamentos:'orcamentos',os:'os',caixa:'caixa',logs:'logs',users:'perfis',categorias:'categorias',config:'config',publico:'publico'};
@@ -62,7 +80,7 @@ async function carregarDados(){
     pode('auditoria')?lerTabela('logs',{recentes:500}):Promise.resolve([])
   ]);
   const emp=(cfg.find(r=>r.id==='empresa')||{}).dados||{};
-  S.empresa={nome:'Tapeçaria',cnpj:'',endereco:'',telefone:'',email:'',encarregado:'',garantia:90,validade:15,retencao:'',...emp,nome:(pub&&pub.nome)||emp.nome||'Tapeçaria',logo:(pub&&pub.logo)||''};
+  S.empresa={cnpj:'',endereco:'',telefone:'',email:'',encarregado:'',garantia:90,validade:15,retencao:'',...emp,nome:(pub&&pub.nome)||emp.nome||'Tapeçaria',logo:(pub&&pub.logo)||''};
   S.exemplo=!!((cfg.find(r=>r.id==='sistema')||{}).dados||{}).exemplo;
   const pega=(col,rows)=>{S[col]=rows.map(r=>({...r.dados,id:r.id}));guardarFoto(col,rows)};
   pega('clientes',cli);if(pode('cli.ver'))SO_LEITURA.delete('clientes');else SO_LEITURA.add('clientes');

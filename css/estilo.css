@@ -535,3 +535,5 @@ mark{background:var(--warn-soft);color:inherit;border-radius:2px;padding:0 1px}
 .doc.a5 .doc-logo{max-height:14mm;max-width:38mm}
 .doc.a5 .doc-emp{gap:6px}
 @media (max-width:640px){.bar .logo-caixa img{max-width:80px;max-height:26px}.painel-logo{max-height:44px;max-width:110px}}
+.cfg-exemplo{margin:0;padding:10px 12px;border-radius:var(--r);background:var(--surface-2);border:1px solid var(--line);font:12px/1.6 var(--f-mono);overflow-x:auto;white-space:pre}
+.aviso code{word-break:break-all}
