@@ -7,5 +7,5 @@
    regras do banco (supabase/schema.sql). NUNCA coloque aqui a chave
    "service_role" / "secret".
    ===================================================================== */
-const SUPABASE_URL = 'https://hlxblmuxusopqhdluidn.supabase.co/rest/v1/';
+const SUPABASE_URL = 'https://hlxblmuxusopqhdluidn.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zh64k0J5--4j6TKLzmov2g_kMm_ShH0';
