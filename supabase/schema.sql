@@ -24,6 +24,8 @@ create table if not exists public.publico (   -- nome e logo da empresa (aparece
   logo text not null default ''
 );
 insert into public.publico (id) values (1) on conflict do nothing;
+-- dados da empresa para a página pública de política de privacidade (LGPD art. 41: contato do encarregado é público)
+alter table public.publico add column if not exists politica jsonb not null default '{}'::jsonb;
 
 do $$
 declare t text;
@@ -412,3 +414,6 @@ begin
     end;
   end loop;
 end $$;
+
+-- avisa a API do Supabase sobre colunas novas
+notify pgrst, 'reload schema';
