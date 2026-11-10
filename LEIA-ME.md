@@ -15,6 +15,7 @@ js/util.js            funções de apoio (busca, CPF/CNPJ, moeda, datas)
 js/teste.js           gerador de dados de teste (pode remover quando for usar de verdade)
 js/tema.js            aplica o tema claro/escuro antes de a página aparecer
 supabase/schema.sql   banco de dados: tabelas e regras de quem pode ver e mudar cada coisa
+tutorial/             guia de uso em PowerPoint, com prints e passo a passo de cada tela
 ```
 
 ---
