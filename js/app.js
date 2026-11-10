@@ -1035,11 +1035,22 @@ V.auditoria=()=>`<div class="head"><div><h2>Auditoria LGPD</h2><p>Quem acessou o
     ${S.users.map(u=>`<tr><td><b>${esc(u.nome)}</b> <span class="lock">${esc(u.login)}</span></td><td>${u.admin?'<span class="chip c-acc">Administrador</span>':'<span class="chip c-mute">Usuário</span>'}</td><td>${u.ativo?'<span class="chip c-ok">Ativo</span>':'<span class="chip c-bad">Bloqueado</span>'}</td><td class="num">${u.admin?'Todas':TODAS_PERMS.filter(p=>u.perms[p]).length+' de '+TODAS_PERMS.length}</td><td>${u.ultimoAcesso?dbr(u.ultimoAcesso)+' '+u.ultimoAcesso.slice(11,16):'Nunca entrou'}</td></tr>`).join('')}
   </tbody></table></div></section>
   <section class="panel"><div class="panel-h"><h3>Checklist LGPD da oficina</h3></div><div class="panel-b" style="display:grid;gap:8px">
-    ${[['Cadastro só com dados necessários (campos opcionais livres)',true],['Promoções apenas com autorização registrada e datada',true],['Cada usuário só vê o que o administrador liberou',true],['Registro de acessos e alterações',true],['Exportação e anonimização a pedido do titular',true],['Aviso de privacidade impresso nos documentos',true],['Login com senha individual e acesso por função',true],['Banco de dados só entrega a cada usuário o que ele pode ver',true],['Senhas guardadas pelo Supabase com criptografia',true],['Saída automática por inatividade',true],['Site com HTTPS (GitHub Pages)',true],['Banco na região São Paulo e backup diário (Supabase)',false],['Política de privacidade publicada e encarregado nomeado',false]].map(([t,ok])=>`<div style="display:flex;gap:10px;align-items:center">${ok?'<span class="chip c-ok">Pronto</span>':'<span class="chip c-warn">Conferir</span>'}<span>${t}</span></div>`).join('')}
+    ${checklistLGPD()}
   </div></section></div>
   <section class="panel"><div class="panel-h"><h3>Registro de atividades</h3><span class="spacer" style="flex:1"></span><span class="lock">${S.logs.length} registro(s)</span></div><div class="tbl-wrap"><table><thead><tr><th>Data e hora</th><th>Usuário</th><th>Ação</th><th>Registro</th></tr></thead><tbody>
   ${S.logs.length?S.logs.slice(0,200).map(l=>`<tr><td style="white-space:nowrap">${new Date(l.data).toLocaleString('pt-BR')}</td><td>${esc(l.user)}</td><td>${esc(l.acao)}</td><td>${esc(l.alvo)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">Ainda não há atividades. Abra um cliente, imprima um orçamento ou troque de perfil para ver os registros aparecerem.</td></tr>'}
   </tbody></table></div></section>`;
+
+function checklistLGPD(){
+  const e=S.empresa,ub=e.ultimoBackup,dias=ub?Math.floor((Date.now()-new Date(ub).getTime())/864e5):null;
+  const itens=[['Cadastro só com dados necessários (campos opcionais livres)',true],['Promoções apenas com autorização registrada e datada',true],['Cada usuário só vê o que o administrador liberou',true],['Registro de acessos e alterações',true],['Exportação e anonimização a pedido do titular',true],['Aviso de privacidade impresso nos documentos',true],['Login com senha individual e acesso por função',true],['Banco de dados só entrega a cada usuário o que ele pode ver',true],['Senhas guardadas pelo Supabase com criptografia',true],['Saída automática por inatividade',true],
+    ['Site com HTTPS (GitHub Pages)',location.protocol==='https:'],
+    ['Banco de dados na região São Paulo (Supabase)',true],
+    [ub?`Cópia de segurança protegida por senha (última: ${dbr(ub)}${dias>7?`, há ${dias} dias. Faça uma nova`:''})`:'Cópia de segurança protegida por senha (nenhuma feita ainda: Configurações → Cópia de segurança)',dias!==null&&dias<=7],
+    ['Política de privacidade publicada <a href="politica.html" target="_blank" rel="noopener">abrir</a>',true],
+    [String(e.encarregado||'').trim()?'Encarregado de dados nomeado: '+esc(e.encarregado):'Encarregado de dados nomeado (preencha em Configurações → Privacidade)',!!String(e.encarregado||'').trim()]];
+  return itens.map(([t,ok])=>`<div style="display:flex;gap:10px;align-items:center">${ok?'<span class="chip c-ok">Pronto</span>':'<span class="chip c-warn">Conferir</span>'}<span>${t}</span></div>`).join('');
+}
 
 /* ---------- Configurações ---------- */
 V.config=()=>{const e=S.empresa;return `<div class="head"><div><h2>Configurações</h2><p>Dados que aparecem no cabeçalho e no rodapé dos documentos impressos.</p></div></div>
@@ -1064,9 +1075,16 @@ V.config=()=>{const e=S.empresa;return `<div class="head"><div><h2>Configuraçõ
   <section class="panel"><div class="panel-h"><h3>Privacidade (LGPD)</h3></div><div class="panel-b"><div class="form">
     <div class="f wide"><label for="kEnc">Encarregado de dados e contato</label><input id="kEnc" value="${esc(e.encarregado)}"><small>Sai no rodapé de todo orçamento e OS. Em empresas pequenas, pode ser o próprio dono.</small></div>
     <div class="f wide"><label for="kRet">Prazo de guarda dos dados</label><textarea id="kRet">${esc(e.retencao)}</textarea></div>
+    <p class="lock" style="margin:0">A política de privacidade pública usa estes dados e os da empresa: <a href="politica.html" target="_blank" rel="noopener">ver a página</a>.</p>
   </div></div></section>
+  ${me()&&me().admin?`<section class="panel"><div class="panel-h"><h3>Cópia de segurança</h3></div><div class="panel-b" style="display:grid;gap:10px">
+    <p style="margin:0">O plano grátis do Supabase <b>não guarda cópias</b> do banco. Baixe uma cópia toda semana e guarde fora do computador (pen drive, Google Drive). O arquivo sai <b>trancado com uma senha</b> sua: sem ela, ninguém abre os dados dos clientes.</p>
+    <p class="lock" style="margin:0">${e.ultimoBackup?'Última cópia: '+dbr(e.ultimoBackup)+' às '+String(e.ultimoBackup).slice(11,16):'Nenhuma cópia feita ainda.'}</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" type="button" id="bkBaixar">Baixar cópia de segurança</button><label class="btn" for="bkArq" tabindex="0">Restaurar uma cópia</label><input type="file" id="bkArq" accept=".json,application/json" hidden></div>
+  </div></section>`:''}
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="kSave">Salvar configurações</button><span class="spacer" style="flex:1"></span><button class="btn" id="kSeed">Carregar dados de teste</button><button class="btn danger" id="kClear">Apagar tudo e começar do zero</button></div>`};
 bind.config=()=>{
+  ligarCopia();
   const arq=$('#logoArq'),err=$('#logoErro');
   $('label[for="logoArq"]').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();arq.click()}};
   arq.onchange=async()=>{
@@ -1096,4 +1114,62 @@ bind.config=()=>{
     render();
   },'Apagar tudo');
 };
+/* ---------- Cópia de segurança (arquivo trancado com senha: PBKDF2 + AES-GCM) ---------- */
+const COPIA_COLS=['clientes','veiculos','produtos','categorias','movs','orcamentos','os','caixa'];
+const b64=u8=>{let s='';for(let i=0;i<u8.length;i+=32768)s+=String.fromCharCode.apply(null,u8.subarray(i,i+32768));return btoa(s)};
+const de64=t=>Uint8Array.from(atob(t),c=>c.charCodeAt(0));
+async function chaveCopia(senha,salt,iter){
+  const base=await crypto.subtle.importKey('raw',new TextEncoder().encode(senha),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt,iterations:iter},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function trancar(obj,senha){
+  const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),iter=310000;
+  const dados=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await chaveCopia(senha,salt,iter),new TextEncoder().encode(JSON.stringify(obj))));
+  return {formato:'tapecaria-copia',versao:1,criado:obj.criado,empresa:obj.empresa.nome||'',iter,salt:b64(salt),iv:b64(iv),dados:b64(dados)};
+}
+async function destrancar(arq,senha){
+  if(!arq||arq.formato!=='tapecaria-copia'||!arq.dados)throw new Error('Este arquivo não é uma cópia de segurança do sistema.');
+  try{const txt=await crypto.subtle.decrypt({name:'AES-GCM',iv:de64(arq.iv)},await chaveCopia(senha,de64(arq.salt),arq.iter||310000),de64(arq.dados));return JSON.parse(new TextDecoder().decode(txt))}
+  catch(e){throw new Error('Senha errada ou arquivo danificado.')}
+}
+function ligarCopia(){
+  const bt=$('#bkBaixar');if(!bt)return;
+  $('label[for="bkArq"]').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#bkArq').click()}};
+  bt.onclick=()=>confirmar(`<p style="margin:0 0 10px">Crie uma senha para trancar a cópia. <b>Anote em lugar seguro</b>: sem ela, a cópia não abre, nem para você.</p>
+    <div class="f"><label for="bkS1">Senha da cópia (mínimo 8 caracteres)</label><input type="password" id="bkS1" autocomplete="new-password"></div>
+    <div class="f" style="margin-top:8px"><label for="bkS2">Repita a senha</label><input type="password" id="bkS2" autocomplete="new-password"></div>`,async v=>{
+    if((v.bkS1||'').length<8){toast('A senha da cópia precisa ter pelo menos 8 caracteres');return}
+    if(v.bkS1!==v.bkS2){toast('As senhas não são iguais');return}
+    bt.disabled=true;bt.textContent='Preparando a cópia…';
+    try{
+      await salvarAgora();
+      const obj={criado:agora(),empresa:{...S.empresa}};
+      for(const c of COPIA_COLS){const rows=await lerTabela(TABELAS[c]);obj[c]=c==='categorias'?rows.map(r=>r.dados.nome||r.id):rows.map(r=>({...r.dados,id:r.id}))}
+      obj.logs=(await lerTabela('logs')).map(r=>({...r.dados,id:r.id}));
+      const arq=await trancar(obj,v.bkS1);
+      const url=URL.createObjectURL(new Blob([JSON.stringify(arq)],{type:'application/json'}));
+      const a=document.createElement('a');a.href=url;a.download='copia_tapecaria_'+hojeISO()+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+      S.empresa.ultimoBackup=obj.criado;log('Baixou cópia de segurança',obj.clientes.length+' clientes, '+obj.os.length+' OS');save();render();
+      toast('Cópia baixada. Guarde o arquivo e a senha em lugares diferentes.');
+    }catch(e){toast('Erro ao fazer a cópia: '+e.message)}
+    finally{const b=$('#bkBaixar');if(b){b.disabled=false;b.textContent='Baixar cópia de segurança'}}
+  },'Baixar cópia','Cópia de segurança');
+  $('#bkArq').onchange=async()=>{
+    const f=$('#bkArq').files[0];$('#bkArq').value='';if(!f)return;
+    let arq;try{arq=JSON.parse(await f.text())}catch(e){toast('Este arquivo não é uma cópia de segurança do sistema.');return}
+    if(!arq||arq.formato!=='tapecaria-copia'){toast('Este arquivo não é uma cópia de segurança do sistema.');return}
+    confirmar(`<p style="margin:0 0 10px">Cópia de <b>${esc(arq.empresa||'—')}</b> feita em <b>${esc(dbr(arq.criado))} ${esc(String(arq.criado||'').slice(11,16))}</b>.</p>
+      <div class="f"><label for="bkS">Senha da cópia</label><input type="password" id="bkS" autocomplete="off"></div>`,async v=>{
+      let c;try{c=await destrancar(arq,v.bkS||'')}catch(e){toast(e.message);return}
+      if(!COPIA_COLS.every(k=>Array.isArray(c[k]))){toast('A cópia está incompleta e não foi usada.');return}
+      confirmar(`Substituir <b>todos</b> os clientes, veículos, estoque, caixa e documentos de agora pelos da cópia?<p class="conf-nota">A cópia tem ${c.clientes.length} cliente(s), ${c.veiculos.length} veículo(s), ${c.produtos.length} material(is), ${c.orcamentos.length} orçamento(s), ${c.os.length} OS e ${c.caixa.length} lançamento(s) de caixa. Usuários, senhas e a auditoria continuam como estão.</p>`,async()=>{
+        toast('Restaurando a cópia…');
+        const logo=S.empresa.logo;COPIA_COLS.forEach(k=>S[k]=c[k]);S.empresa={...S.empresa,...c.empresa,logo:logo||c.empresa.logo||''};migrar(S);
+        log('Restaurou cópia de segurança','Cópia de '+dbr(c.criado));
+        try{await salvarAgora();await sb.rpc('ajustar_numeracao');toast('Cópia restaurada')}catch(e){toast('Erro ao restaurar: '+e.message)}
+        render();
+      },'Apagar e restaurar','Restaurar cópia');
+    },'Abrir cópia','Restaurar cópia de segurança');
+  };
+}
 // O sistema começa pela tela de login (js/acesso.js)

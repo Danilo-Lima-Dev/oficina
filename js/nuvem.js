@@ -45,7 +45,7 @@ const SO_LEITURA=new Set();  // coleções carregadas em resumo (ex.: nome abrev
 function linhas(col){
   if(col==='categorias')return S.categorias.map(n=>({id:n,dados:{nome:n}}));
   if(col==='config'){const {logo,...emp}=S.empresa;return [{id:'empresa',dados:emp},{id:'sistema',dados:{exemplo:!!S.exemplo}}]}
-  if(col==='publico')return [{id:1,dados:{nome:S.empresa.nome||'Tapeçaria',logo:S.empresa.logo||''}}];
+  if(col==='publico'){const e=S.empresa;return [{id:1,dados:{nome:e.nome||'Tapeçaria',logo:e.logo||'',politica:{cnpj:e.cnpj||'',endereco:e.endereco||'',telefone:e.telefone||'',email:e.email||'',encarregado:e.encarregado||'',retencao:e.retencao||''}}}]}
   return (S[col]||[]).map(o=>{if(!o.id)o.id=uid();const {id,...dados}=o;return {id,dados}});
 }
 const json=v=>JSON.stringify(v);
@@ -133,7 +133,9 @@ async function gravarColecao(col){
   for(let i=0;i<novos.length;i+=500){const parte=novos.slice(i,i+500);const {error}=await sb.from(tabela).insert(parte);if(error)throw error;parte.forEach(l=>antes.set(String(l.id),json(l.dados)))}
   // alterar
   for(const l of mudados){
-    const {error}=col==='publico'?await sb.from(tabela).update(l.dados).eq('id',1):await sb.from(tabela).update({dados:l.dados}).eq('id',l.id);
+    let {error}=col==='publico'?await sb.from(tabela).update(l.dados).eq('id',1):await sb.from(tabela).update({dados:l.dados}).eq('id',l.id);
+    // banco ainda sem a coluna da política (schema.sql antigo): grava só nome e logo
+    if(error&&col==='publico'&&/politica/i.test(error.message||'')){const {politica,...resto}=l.dados;({error}=await sb.from(tabela).update(resto).eq('id',1))}
     if(error)throw error;antes.set(String(l.id),json(l.dados));
   }
   FOTO[col]=antes;
